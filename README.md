@@ -107,7 +107,6 @@ Prometheus metrics are served on `[metrics].addr`:
 - `parse_duration_seconds{stream}` -- per-line parse time
 - `commit_duration_seconds{table}` -- ClickHouse batch flush time
 - `tailer_lines_total` -- lines read by the tailer
-```
 
 ## License
 
