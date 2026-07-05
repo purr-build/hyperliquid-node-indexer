@@ -1,6 +1,4 @@
-use chrono::Utc;
 use clickhouse::{Client, Row, error::Result, inserter::Inserter};
-use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 use std::time::Duration;
 
@@ -42,18 +40,13 @@ pub fn cloid_from_hex(s: &str) -> Result<Cloid, &'static str> {
     bytes_from_hex(s)
 }
 
-/// Parse a big-endian integer hex string (e.g. an ECDSA signature `r`/`s`)
-/// into a fixed-size buffer, right-aligned. Hyperliquid emits these as minimal
-/// hex with leading zero bytes (and a leading zero nibble) stripped, so the
-/// string may be shorter than `N * 2` chars or have odd length.
 fn uint_from_hex<const N: usize>(s: &str) -> Result<[u8; N], &'static str> {
     let s = s.strip_prefix("0x").unwrap_or(s);
     if s.len() > N * 2 {
         return Err("unexpected hex length");
     }
     let mut out = [0u8; N];
-    // Walk from the least-significant nibble so an odd-length string pads the
-    // top nibble of the most-significant byte with zero.
+
     let bytes = s.as_bytes();
     let mut byte_idx = N;
     let mut i = bytes.len();
@@ -121,86 +114,6 @@ pub fn decimal_from_str(s: &str) -> Result<Decimal, &'static str> {
     Ok(if negative { -value } else { value })
 }
 
-#[derive(Deserialize, Row, Serialize, Debug)]
-pub struct BlockRow {
-    pub number: u64,
-    pub hash: Hash,
-    pub proposer: Address,
-    #[serde(with = "clickhouse::serde::chrono::datetime64::nanos")]
-    pub time: chrono::DateTime<Utc>,
-    pub round: u64,
-    pub parent_round: u64,
-    pub hardfork_version: Option<u64>,
-    pub hardfork_round: Option<u64>,
-}
-
-#[derive(Deserialize, Row, Serialize, Debug)]
-pub struct SignedActionBundleRow {
-    pub block_number: u64,
-    pub hash: Hash,
-    pub broadcaster: Address,
-    pub broadcaster_nonce: u64,
-}
-
-#[derive(Deserialize, Row, Serialize, Debug)]
-pub struct ActionRow {
-    #[serde(with = "clickhouse::serde::chrono::datetime64::nanos")]
-    pub block_time: chrono::DateTime<Utc>,
-    pub round: u64,
-    pub proposer: Address,
-    pub bundle_hash: Hash,
-    pub broadcaster: Address,
-    pub broadcaster_nonce: u64,
-    pub nonce: u64,
-    pub vault_address: Option<Address>,
-    pub expires_after: Option<u64>,
-    pub sig_r: Hash,
-    pub sig_s: Hash,
-    pub sig_v: u8,
-    pub action_type: String,
-    pub status: String,
-    pub user: Option<Address>,
-    pub response_type: String,
-    pub payload: String,
-}
-
-#[derive(Deserialize, Row, Serialize, Debug)]
-pub struct NodeFillRow {
-    #[serde(with = "clickhouse::serde::chrono::datetime64::nanos")]
-    pub local_time: chrono::DateTime<Utc>,
-    #[serde(with = "clickhouse::serde::chrono::datetime64::nanos")]
-    pub block_time: chrono::DateTime<Utc>,
-    pub block_number: u64,
-    pub user: Address,
-    pub coin: String,
-    pub px: Decimal,
-    pub sz: Decimal,
-    pub side: String,
-    #[serde(with = "clickhouse::serde::chrono::datetime64::millis")]
-    pub time: chrono::DateTime<Utc>,
-    pub start_position: Decimal,
-    pub dir: String,
-    pub closed_pnl: Decimal,
-    pub hash: Hash,
-    pub oid: u64,
-    pub crossed: bool,
-    pub liquidation_liquidated_user: Option<Address>,
-    pub liquidation_mark_px: Option<Decimal>,
-    pub liquidation_method: Option<String>,
-    pub fee: Decimal,
-    pub builder_fee: Option<Decimal>,
-    pub tid: u64,
-    pub cloid: Option<Cloid>,
-    pub fee_token: String,
-    pub builder: Option<Address>,
-    pub twap_id: Option<u64>,
-    pub deployer_fee: Option<Decimal>,
-    pub priority_gas: Option<Decimal>,
-}
-
-/// Soft batch limits per inserter. Flushing on size (rows/bytes) keeps batches
-/// large enough to avoid ClickHouse "too many parts" throttling; the period
-/// bounds how long rows wait before being inserted during low-volume periods.
 const INSERT_MAX_ROWS: u64 = 500_000;
 const INSERT_MAX_BYTES: u64 = 256 * 1024 * 1024;
 const INSERT_PERIOD: Duration = Duration::from_secs(10);

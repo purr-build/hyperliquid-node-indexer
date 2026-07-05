@@ -16,7 +16,10 @@ use tokio_tungstenite::{
 };
 use tracing::{debug, info, warn};
 
-use crate::storage::{Address, BlockRow, Cloid, DECIMAL_MULTIPLIER, Decimal, Hash, NodeFillRow};
+use crate::{
+    storage::{Address, Cloid, DECIMAL_MULTIPLIER, Decimal, Hash},
+    streams::{node_fills::NodeFillRow, replica_cmds::BlockRow},
+};
 
 const CHANNEL_CAPACITY: usize = 4096;
 
