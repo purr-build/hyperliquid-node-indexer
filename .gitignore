@@ -1,0 +1,4 @@
+/target
+hl-data/
+.env
+.env.node

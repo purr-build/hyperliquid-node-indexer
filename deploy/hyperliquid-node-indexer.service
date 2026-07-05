@@ -1,0 +1,16 @@
+[Unit]
+Description=Hyperliquid Node Indexer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/node-indexer
+ExecStart=/usr/local/bin/hyperliquid-node-indexer --config /opt/node-indexer/config/node.toml
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+SyslogIdentifier=node-indexer
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,51 @@
+[package]
+name = "hyperliquid-node-indexer"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clickhouse = {version = "0.14", features = ["inserter", "chrono"]}
+config = {version = "0.15", features = ["toml"]}
+types = { path = "crates/types" }
+tailer = { path = "crates/tailer" }
+chrono = {version = "0.4", features = ["serde"]}
+tokio = { version = "1", features = ["full"] }
+sha3 = "0.10"
+simd-json = {version="0.17", features = ["serde_impl"]}
+mimalloc = { version = "*", features = ["secure"] }
+anyhow = "1"
+clap = {version = "4.6.1", features = ["derive"]}
+tokio-stream = "0.1"
+futures = "0.3.32"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+metrics-exporter-prometheus = "0.18.3"
+metrics = "0.24.6"
+tempfile = "3.27.0"
+tokio-tungstenite = "0.29.0"
+futures-util = "0.3.32"
+
+
+
+[dev-dependencies]
+clickhouse = { version = "0.14", features = ["test-util"] }
+criterion = { version = "0.8", features = ["html_reports"] }
+tempfile = "3.27.0"
+
+[[bench]]
+name = "deserialize_replica_cmds"
+harness = false
+
+[[bench]]
+name = "tailer"
+harness = false
+
+[profile.release]
+debug = true
+
+[profile.profiling]
+inherits = "release"
+debug = true

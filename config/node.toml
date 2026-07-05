@@ -1,0 +1,17 @@
+checkpoints_dir = "/home/hyperliquid/indexer/checkpoints"
+data_dir = "/home/hyperliquid/hl/data"
+
+[metrics]
+enabled = true
+addr = "0.0.0.0:9091"
+
+[storage]
+enabled = true
+url = "http://localhost:8123"
+user="default"
+password = ""
+database = "default"
+
+[websocket]
+enabled = true
+addr = "0.0.0.0:8000"

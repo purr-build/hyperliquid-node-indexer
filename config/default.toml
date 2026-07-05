@@ -1,0 +1,16 @@
+data_dir = "/home/hyperliquid/hl/data"
+
+[metrics]
+enabled = true
+addr = "0.0.0.0:9090"
+
+[storage]
+enabled = true
+url = "http://localhost:8123"
+user="hl"
+password = "hl"
+database = "hl"
+
+[websocket]
+enabled = true
+addr = "0.0.0.0:8000"

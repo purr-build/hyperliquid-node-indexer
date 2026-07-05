@@ -1,0 +1,89 @@
+version: "3"
+
+dotenv: [".env"]
+
+vars:
+tasks:
+  test:
+    desc: Run tests
+    cmds:
+      - cargo nextest run
+  fmt:
+    desc: Format code
+    cmds:
+      - cargo +nightly fmt
+  lint-fix:
+    desc: Run clippy with --fix to automatically fix lint issues
+    cmds:
+      - cargo +nightly clippy --fix --allow-dirty --allow-staged
+  reset:
+    desc: Drop and recreate the database, then apply all migrations
+    cmds:
+      - |
+        curl -s -u {{.CH_USER}}:{{.CH_PASSWORD}} \
+          "{{.CH_URL}}/" \
+          --data-binary "DROP DATABASE IF EXISTS {{.CH_DATABASE}}"
+      - |
+        curl -s -u {{.CH_USER}}:{{.CH_PASSWORD}} \
+          "{{.CH_URL}}/" \
+          --data-binary "CREATE DATABASE {{.CH_DATABASE}}"
+      - task: migrate
+
+  migrate:
+    desc: Apply all migrations
+    cmds:
+      - |
+        for f in migrations/*.sql; do
+          echo "Applying $f..."
+          curl -s -u {{.CH_USER}}:{{.CH_PASSWORD}} \
+            "{{.CH_URL}}/?database={{.CH_DATABASE}}" \
+            --data-binary @"$f"
+          echo ""
+        done
+
+  build-release:
+    desc: Build release
+    vars:
+      BUILD_FLAGS: '{{.BUILD_FLAGS | default "--release"}}'
+      RUSTFLAGS: '{{ .RUSTFLAGS | default "-C target-cpu=native"}}'
+      CARGO: '{{ .CARGO | default "cargo"}}'
+    cmds:
+      - |
+        RUSTFLAGS="{{.RUSTFLAGS}}" {{.CARGO}} build {{.BUILD_FLAGS}}
+
+  sync-to-node:
+    desc: Sync source to node
+    vars:
+      REMOTE_DIR: '{{.REMOTE_DIR | default "/tmp/node-indexer-src"}}'
+      CONFIG: '{{.CONFIG | default "config/node"}}'
+      REMOTE_ARGS: ""
+    cmds:
+      - |
+        rsync -az --delete \
+          --exclude 'target/' \
+          --exclude 'crates/types/target/' \
+          --exclude '.git/' \
+          --exclude 'hl-data/' \
+          --exclude '.env' \
+          ./ {{.REMOTE_HOST}}:{{.REMOTE_DIR}}/
+      - |
+        scp .env.node {{.REMOTE_HOST}}:{{.REMOTE_DIR}}/.env
+      - |
+        ssh -t {{.REMOTE_HOST}} "cd {{.REMOTE_DIR}} && task build-release CARGO='/root/.cargo/bin/cargo' && ln -fs {{.REMOTE_DIR}}/target/release/hyperliquid-node-indexer /usr/local/bin/hyperliquid-node-indexer"
+
+  deploy-node:
+    desc: Build on the node, install the systemd unit, and restart the service
+    vars:
+      REMOTE_DIR: '{{.REMOTE_DIR | default "/opt/node-indexer"}}'
+      SERVICE: hyperliquid-node-indexer.service
+    cmds:
+      - task: sync-to-node
+        vars:
+          REMOTE_DIR: '{{.REMOTE_DIR}}'
+      - |
+        ssh -t {{.REMOTE_HOST}} " \
+          install -Dm644 {{.REMOTE_DIR}}/deploy/{{.SERVICE}} /etc/systemd/system/{{.SERVICE}} && \
+          systemctl daemon-reload && \
+          systemctl enable {{.SERVICE}} && \
+          systemctl restart {{.SERVICE}} && \
+          systemctl --no-pager --full status {{.SERVICE}}"

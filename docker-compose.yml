@@ -1,0 +1,39 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.3
+    container_name: hl-clickhouse
+    ports:
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
+    environment:
+      CLICKHOUSE_DB: hl
+      CLICKHOUSE_USER: hl
+      CLICKHOUSE_PASSWORD: hl
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+      - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "clickhouse-client",
+          "--user",
+          "hl",
+          "--password",
+          "hl",
+          "--query",
+          "SELECT 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  clickhouse-data:
+  clickhouse-logs:
