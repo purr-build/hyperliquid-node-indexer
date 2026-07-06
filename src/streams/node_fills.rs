@@ -14,7 +14,7 @@ use crate::{
         Stream, commit_metered, parse_datetime_nanos, parse_decimal_field, parse_millis,
         parse_optional_decimal_field,
     },
-    websocket::WsPublisher,
+    websocket::{WsData, WsServer},
 };
 
 #[derive(Deserialize, Row, Serialize, Debug)]
@@ -136,11 +136,11 @@ pub struct NodeFills;
 
 pub struct NodeFillsSinks {
     fills: Inserter<NodeFillRow>,
-    ws: Option<WsPublisher>,
+    ws: Option<WsServer>,
 }
 
 impl NodeFillsSinks {
-    pub fn new(ch: &Client, ws: Option<WsPublisher>) -> Self {
+    pub fn new(ch: &Client, ws: Option<WsServer>) -> Self {
         Self {
             fills: new_inserter(ch, "node_fills"),
             ws,
@@ -172,7 +172,7 @@ impl Stream for NodeFills {
         }
 
         if let Some(ws) = &sinks.ws {
-            ws.publish_fills(rows);
+            ws.send(WsData::NodeFills(rows));
         }
 
         Ok(())

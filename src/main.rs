@@ -18,7 +18,7 @@ use crate::{
         node_fills::{NodeFills, NodeFillsSinks},
         replica_cmds::{ReplicaCmds, ReplicaCmdsSinks},
     },
-    websocket::{WsPublisher, WsServer},
+    websocket::WsServer,
 };
 
 #[global_allocator]
@@ -53,7 +53,7 @@ async fn run_indexer(
     config: IndexerConfig,
     ch: Client,
     metrics: &Metrics,
-    ws: Option<WsPublisher>,
+    ws: Option<WsServer>,
 ) -> anyhow::Result<()> {
     fs::create_dir_all(&config.checkpoints_dir)?;
 
@@ -118,13 +118,13 @@ async fn main() -> ExitCode {
         };
 
         let server = WsServer::new();
-        let publisher = server.publisher();
+        let ws = server.clone();
         tokio::spawn(async move {
             if let Err(e) = server.run(listen_addr).await {
                 error!(error = %e, "Websocket server failed");
             }
         });
-        Some(publisher)
+        Some(ws)
     } else {
         None
     };

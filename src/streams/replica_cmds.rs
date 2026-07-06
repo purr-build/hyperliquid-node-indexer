@@ -10,7 +10,7 @@ use crate::{
     metrics::Metrics,
     storage::{Address, Hash, address_from_hex, hash, hash_from_hex, new_inserter, sig_from_hex},
     streams::{Stream, commit_metered, parse_datetime_nanos},
-    websocket::WsPublisher,
+    websocket::{WsData, WsServer},
 };
 
 #[derive(Deserialize, Row, Serialize, Debug)]
@@ -177,11 +177,11 @@ pub struct ReplicaCmdsSinks {
     blocks: Inserter<BlockRow>,
     bundles: Inserter<SignedActionBundleRow>,
     actions: Inserter<ActionRow>,
-    ws: Option<WsPublisher>,
+    ws: Option<WsServer>,
 }
 
 impl ReplicaCmdsSinks {
-    pub fn new(ch: &Client, ws: Option<WsPublisher>) -> Self {
+    pub fn new(ch: &Client, ws: Option<WsServer>) -> Self {
         Self {
             blocks: new_inserter(ch, "blocks"),
             bundles: new_inserter(ch, "signed_action_bundle"),
@@ -219,7 +219,7 @@ impl Stream for ReplicaCmds {
         sinks.blocks.write(&rows.block).await?;
 
         if let Some(ws) = &sinks.ws {
-            ws.publish_block(&rows.block);
+            ws.send(WsData::Blocks(&rows.block));
         }
 
         for b in &rows.bundles {
