@@ -54,7 +54,11 @@ pub struct NodeFill {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub liquidation: Option<NodeFillLiquidation>,
     pub fee: Decimal,
-    #[serde(default, rename = "builderFee", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        rename = "builderFee",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub builder_fee: Option<Decimal>,
     pub tid: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -86,6 +90,63 @@ pub struct NodeFillLiquidation {
     #[serde(rename = "markPx")]
     pub mark_px: Decimal,
     pub method: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Hip3OracleUpdatesData {
+    pub local_time: String,
+    pub block_time: String,
+    pub block_number: u64,
+    pub events: Vec<Hip3OracleUpdate>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Hip3OracleUpdate {
+    pub update_class: String,
+    pub mark_px_inputs: Vec<Hip3OraclePxInput>,
+    pub spot_px_inputs: Vec<Hip3OraclePxInput>,
+    pub external_perp_px_inputs: Vec<Hip3OraclePxInput>,
+    pub oracle_pxs: Hip3OraclePxs,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Hip3OraclePxInput(pub String, pub Decimal);
+
+impl Hip3OraclePxInput {
+    pub fn coin(&self) -> &str {
+        &self.0
+    }
+
+    pub fn px(&self) -> &str {
+        &self.1
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Hip3OraclePxs {
+    pub coin_to_mark_px: Vec<Hip3OraclePxEntry>,
+    pub coin_to_oracle_px: Vec<Hip3OraclePxEntry>,
+    pub coin_to_external_perp_px: Vec<Hip3OraclePxEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Hip3OraclePxEntry(pub String, pub Hip3OraclePx);
+
+impl Hip3OraclePxEntry {
+    pub fn coin(&self) -> &str {
+        &self.0
+    }
+
+    pub fn px(&self) -> &Hip3OraclePx {
+        &self.1
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Hip3OraclePx {
+    pub px: Decimal,
+    pub last_update_time: String,
+    pub daily_px: Decimal,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -738,6 +799,30 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn parses_hip3_oracle_update_stream_event() {
+        let data: Hip3OracleUpdatesData = serde_json::from_str(include_str!(
+            "../../../hl-data/hip3_oracle_updates_streaming"
+        ))
+        .expect("hip3 oracle update should parse");
+
+        assert_eq!(data.block_number, 1061545103);
+        assert_eq!(data.events.len(), 1);
+
+        let event = &data.events[0];
+        assert_eq!(event.update_class, "Deployer");
+        assert_eq!(event.mark_px_inputs[0].coin(), "para:AVGO");
+        assert_eq!(event.mark_px_inputs[0].px(), "368.41");
+        assert_eq!(event.oracle_pxs.coin_to_mark_px[0].coin(), "para:AVGO");
+        assert_eq!(event.oracle_pxs.coin_to_mark_px[0].px().px, "368.41");
+        assert_eq!(
+            event.oracle_pxs.coin_to_external_perp_px[2]
+                .px()
+                .last_update_time,
+            "1970-01-01T00:00:00"
+        );
+    }
 
     #[test]
     fn parses_block_with_order_and_response() {

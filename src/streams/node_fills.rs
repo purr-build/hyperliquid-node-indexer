@@ -135,14 +135,14 @@ pub fn parse(mut line: Vec<u8>) -> anyhow::Result<Vec<NodeFillRow>> {
 pub struct NodeFills;
 
 pub struct NodeFillsSinks {
-    fills: Inserter<NodeFillRow>,
+    node_fills: Inserter<NodeFillRow>,
     ws: Option<WsServer>,
 }
 
 impl NodeFillsSinks {
     pub fn new(ch: &Client, ws: Option<WsServer>) -> Self {
         Self {
-            fills: new_inserter(ch, "node_fills"),
+            node_fills: new_inserter(ch, "node_fills"),
             ws,
         }
     }
@@ -168,7 +168,7 @@ impl Stream for NodeFills {
             let lag = (Utc::now() - row.block_time).as_seconds_f64();
             metrics.record_ingested(Self::NAME, "fill");
             metrics.record_lag(Self::NAME, lag);
-            sinks.fills.write(row).await?;
+            sinks.node_fills.write(row).await?;
         }
 
         if let Some(ws) = &sinks.ws {
@@ -179,7 +179,7 @@ impl Stream for NodeFills {
     }
 
     async fn commit(sinks: &mut Self::Sinks, metrics: &Metrics, force: bool) -> anyhow::Result<()> {
-        commit_metered(&mut sinks.fills, "node_fills", metrics, force).await
+        commit_metered(&mut sinks.node_fills, "node_fills", metrics, force).await
     }
 }
 
