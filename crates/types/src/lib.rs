@@ -227,6 +227,22 @@ impl TwapStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SystemAndCoreWriterActionsData {
+    pub local_time: String,
+    pub block_time: String,
+    pub block_number: u64,
+    pub events: Vec<SystemAndCoreWriterActionEvent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SystemAndCoreWriterActionEvent {
+    pub user: Address,
+    pub nonce: Nonce,
+    pub evm_tx_hash: Hash,
+    pub action: Map<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BlockData {
     #[serde(rename = "abci_block")]
     pub abci_block: AbciBlockIn,

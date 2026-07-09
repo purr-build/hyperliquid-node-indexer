@@ -3,6 +3,7 @@ pub mod misc_events;
 pub mod node_fills;
 pub mod node_twap_statuses;
 pub mod replica_cmds;
+pub mod system_and_core_writer_actions;
 
 use std::{
     path::PathBuf,
