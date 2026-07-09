@@ -1,6 +1,7 @@
 pub mod hip3_oracle_updates;
 pub mod misc_events;
 pub mod node_fills;
+pub mod node_twap_statuses;
 pub mod replica_cmds;
 
 use std::{
@@ -8,7 +9,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use clickhouse::{Row, inserter::Inserter};
 use futures::stream::StreamExt;
@@ -132,11 +132,7 @@ fn build_tailer(
                 offset: 0,
             });
 
-            let parent = path
-                .parent()
-                .with_context(|| format!("{} has no parent directory", path.display()))?;
-            let files_collector = FilesCollector::new(parent.to_path_buf(), |a, b| a.cmp(b))?;
-            tailer.with_files(files_collector);
+            tailer.with_files(FilesCollector::single(path));
 
             Ok((tailer, None))
         }

@@ -22,6 +22,13 @@ pub struct FilesCollector {
 }
 
 impl FilesCollector {
+    pub fn single(path: PathBuf) -> Self {
+        Self {
+            files: vec![path],
+            cursor: 0,
+        }
+    }
+
     pub fn new<F>(dir: PathBuf, compare: F) -> std::io::Result<Self>
     where
         F: FnMut(&PathBuf, &PathBuf) -> std::cmp::Ordering,
@@ -93,5 +100,13 @@ mod tests {
                 PathBuf::from("replica_cmds/2026-05-30T08:55:03Z/20260531/1016230000"),
             ]
         );
+    }
+
+    #[test]
+    fn collects_only_the_requested_file() {
+        let path = PathBuf::from("node_twap_statuses_streaming/one-file");
+        let files: Vec<_> = FilesCollector::single(path.clone()).collect();
+
+        assert_eq!(files, vec![path]);
     }
 }

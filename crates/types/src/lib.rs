@@ -180,6 +180,53 @@ impl MiscEvent {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NodeTwapStatusesData {
+    pub local_time: String,
+    pub block_time: String,
+    pub block_number: u64,
+    pub events: Vec<NodeTwapStatusEvent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NodeTwapStatusEvent {
+    pub time: String,
+    pub twap_id: u64,
+    pub state: NodeTwapState,
+    pub status: TwapStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeTwapState {
+    pub coin: String,
+    pub user: Address,
+    pub side: String,
+    pub sz: Decimal,
+    pub executed_sz: Decimal,
+    pub executed_ntl: Decimal,
+    pub minutes: u64,
+    pub reduce_only: bool,
+    pub randomize: bool,
+    pub timestamp: Millis,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum TwapStatus {
+    Named(String),
+    Error { error: String },
+}
+
+impl TwapStatus {
+    pub fn into_parts(self) -> (String, Option<String>) {
+        match self {
+            Self::Named(status) => (status, None),
+            Self::Error { error } => ("error".to_string(), Some(error)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BlockData {
     #[serde(rename = "abci_block")]
     pub abci_block: AbciBlockIn,

@@ -10,7 +10,7 @@ Indexes data streams written by a [Hyperliquid node](https://github.com/hyperliq
 - [ ] `system_and_core_writer_actions`
 - [x] `misc_events` -- typed event envelope with variant-specific data in a queryable JSON payload
 - [ ] `evm_blocks_and_receipts`
-- [ ] `node_twap_statuses`
+- [x] `node_twap_statuses` -- TWAP lifecycle state, execution progress, and errors
 - [ ] `node_trades`
 - [ ] `node_raw_book_diffs`
 - [ ] `node_order_statuses`
@@ -36,6 +36,7 @@ cargo run --release -- --config config/default.toml
 cargo run --release -- parse-replica-cmds --path /path/to/replica_cmds/.../file
 cargo run --release -- parse-node-fills --path /path/to/node_fills_streaming/.../file
 cargo run --release -- parse-misc-events --path /path/to/misc_events_streaming/.../file
+cargo run --release -- parse-node-twap-statuses --path /path/to/node_twap_statuses_streaming/.../file
 ```
 
 ## Configuration
@@ -98,6 +99,7 @@ One table per stream, defined in `migrations/`:
 | `node_fills`           | `node_fills`   | fills, one row per (user, fill)             |
 | `hip3_oracle_updates`  | `hip3_oracle_updates` | one row per updated HIP-3 asset     |
 | `misc_events`          | `misc_events`  | common event envelope and variant JSON payload |
+| `node_twap_statuses`   | `node_twap_statuses` | TWAP lifecycle and execution state     |
 
 Prices and sizes are stored as `Decimal(38, 18)`; addresses and hashes as raw `FixedString` bytes. The `misc_events.payload` JSON column preserves variant-specific fields and supports native ClickHouse JSON queries. Tables have a short TTL by default (1 day) -- adjust the migrations to your retention needs before deploying.
 
