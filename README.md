@@ -6,7 +6,7 @@ Indexes data streams written by a [Hyperliquid node](https://github.com/hyperliq
 
 - [x] `replica_cmds` -- blocks, signed action bundles, and every action with its execution status and response
 - [x] `node_fills` -- fills with full detail (liquidations, builder fees, TWAP ids, etc.)
-- [ ] `hip3_oracle_updates`
+- [x] `hip3_oracle_updates`
 - [ ] `system_and_core_writer_actions`
 - [ ] `misc_events`
 - [ ] `evm_blocks_and_receipts`

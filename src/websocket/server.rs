@@ -17,7 +17,9 @@ use tokio_tungstenite::{
 use tracing::{debug, info, warn};
 
 use crate::{
-    streams::{node_fills::NodeFillRow, replica_cmds::BlockRow},
+    streams::{
+        hip3_oracle_updates::Hip3OracleUpdateRow, node_fills::NodeFillRow, replica_cmds::BlockRow,
+    },
     websocket::{
         messages::{BlockMsg, NodeFillMsg, channel_msg},
         subscription::{
@@ -31,6 +33,7 @@ const CHANNEL_CAPACITY: usize = 4096;
 struct Channels {
     blocks: broadcast::Sender<Utf8Bytes>,
     node_fills: broadcast::Sender<Utf8Bytes>,
+    hip3_oracle_updates: broadcast::Sender<Utf8Bytes>,
 }
 
 impl Channels {
@@ -38,6 +41,7 @@ impl Channels {
         match kind {
             SubscriptionKind::Blocks => &self.blocks,
             SubscriptionKind::NodeFills => &self.node_fills,
+            SubscriptionKind::Hip3OracleUpdates => &self.hip3_oracle_updates,
         }
     }
 }
@@ -45,6 +49,7 @@ impl Channels {
 pub enum WsData<'a> {
     Blocks(&'a BlockRow),
     NodeFills(&'a [NodeFillRow]),
+    Hip3OracleUpdates(&'a [Hip3OracleUpdateRow]),
 }
 
 impl WsData<'_> {
@@ -52,6 +57,7 @@ impl WsData<'_> {
         match self {
             Self::Blocks(_) => SubscriptionKind::Blocks,
             Self::NodeFills(_) => SubscriptionKind::NodeFills,
+            Self::Hip3OracleUpdates(_) => SubscriptionKind::Hip3OracleUpdates,
         }
     }
 }
@@ -65,8 +71,14 @@ impl WsServer {
     pub fn new() -> Self {
         let (blocks, _) = broadcast::channel(CHANNEL_CAPACITY);
         let (node_fills, _) = broadcast::channel(CHANNEL_CAPACITY);
+        let (hip3_oracle_updates, _) = broadcast::channel(CHANNEL_CAPACITY);
+
         Self {
-            channels: Arc::new(Channels { blocks, node_fills }),
+            channels: Arc::new(Channels {
+                blocks,
+                node_fills,
+                hip3_oracle_updates,
+            }),
         }
     }
 
@@ -85,6 +97,12 @@ impl WsServer {
                 }
                 let msgs: Vec<NodeFillMsg> = fills.iter().map(NodeFillMsg::from).collect();
                 channel_msg(&channel, &msgs)
+            }
+            WsData::Hip3OracleUpdates(updates) => {
+                if updates.is_empty() {
+                    return;
+                }
+                channel_msg(&channel, &updates)
             }
         };
         let _ = tx.send(msg);
@@ -132,13 +150,16 @@ async fn handle_connection(stream: TcpStream, channels: &Channels) -> anyhow::Re
 
     let mut blocks_rx: Option<broadcast::Receiver<Utf8Bytes>> = None;
     let mut fills_rx: Option<broadcast::Receiver<Utf8Bytes>> = None;
+    let mut hip3_oracle_updates_rx: Option<broadcast::Receiver<Utf8Bytes>> = None;
 
     // Subscriptions requested via query string, e.g. `?subscription=nodeFills`.
     for subscription in subscriptions_from_query(&query) {
         let rx = match subscription {
             SubscriptionKind::Blocks => &mut blocks_rx,
             SubscriptionKind::NodeFills => &mut fills_rx,
+            SubscriptionKind::Hip3OracleUpdates => &mut hip3_oracle_updates_rx,
         };
+
         *rx = Some(channels.sender(subscription).subscribe());
         let ack = channel_msg(
             "subscriptionResponse",
@@ -159,6 +180,7 @@ async fn handle_connection(stream: TcpStream, channels: &Channels) -> anyhow::Re
                             let rx = match subscription {
                                 SubscriptionKind::Blocks => &mut blocks_rx,
                                 SubscriptionKind::NodeFills => &mut fills_rx,
+                                SubscriptionKind::Hip3OracleUpdates => &mut hip3_oracle_updates_rx,
                             };
                             *rx = Some(channels.sender(subscription).subscribe());
                             channel_msg(
@@ -170,6 +192,7 @@ async fn handle_connection(stream: TcpStream, channels: &Channels) -> anyhow::Re
                             match subscription {
                                 SubscriptionKind::Blocks => blocks_rx = None,
                                 SubscriptionKind::NodeFills => fills_rx = None,
+                                SubscriptionKind::Hip3OracleUpdates => hip3_oracle_updates_rx = None,
                             }
                             channel_msg(
                                 "subscriptionResponse",

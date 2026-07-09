@@ -15,6 +15,7 @@ pub enum ClientRequest {
 pub enum SubscriptionKind {
     Blocks,
     NodeFills,
+    Hip3OracleUpdates,
 }
 
 impl SubscriptionKind {
@@ -32,6 +33,7 @@ impl std::fmt::Display for SubscriptionKind {
         match self {
             Self::Blocks => write!(f, "blocks"),
             Self::NodeFills => write!(f, "nodeFills"),
+            Self::Hip3OracleUpdates => write!(f, "hip3OracleUpdates"),
         }
     }
 }

@@ -1,3 +1,4 @@
+pub mod hip3_oracle_updates;
 pub mod node_fills;
 pub mod replica_cmds;
 
