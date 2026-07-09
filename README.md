@@ -8,7 +8,7 @@ Indexes data streams written by a [Hyperliquid node](https://github.com/hyperliq
 - [x] `node_fills` -- fills with full detail (liquidations, builder fees, TWAP ids, etc.)
 - [x] `hip3_oracle_updates`
 - [ ] `system_and_core_writer_actions`
-- [ ] `misc_events`
+- [x] `misc_events` -- typed event envelope with variant-specific data in a queryable JSON payload
 - [ ] `evm_blocks_and_receipts`
 - [ ] `node_twap_statuses`
 - [ ] `node_trades`
@@ -35,6 +35,7 @@ cargo run --release -- --config config/default.toml
 ```sh
 cargo run --release -- parse-replica-cmds --path /path/to/replica_cmds/.../file
 cargo run --release -- parse-node-fills --path /path/to/node_fills_streaming/.../file
+cargo run --release -- parse-misc-events --path /path/to/misc_events_streaming/.../file
 ```
 
 ## Configuration
@@ -95,8 +96,10 @@ One table per stream, defined in `migrations/`:
 | `signed_action_bundle` | `replica_cmds` | bundle hash, broadcaster, nonce             |
 | `actions`              | `replica_cmds` | every action: signature, status, JSON payload |
 | `node_fills`           | `node_fills`   | fills, one row per (user, fill)             |
+| `hip3_oracle_updates`  | `hip3_oracle_updates` | one row per updated HIP-3 asset     |
+| `misc_events`          | `misc_events`  | common event envelope and variant JSON payload |
 
-Prices and sizes are stored as `Decimal(38, 18)`; addresses and hashes as raw `FixedString` bytes. Tables have a short TTL by default (1 day) -- adjust the migrations to your retention needs before deploying.
+Prices and sizes are stored as `Decimal(38, 18)`; addresses and hashes as raw `FixedString` bytes. The `misc_events.payload` JSON column preserves variant-specific fields and supports native ClickHouse JSON queries. Tables have a short TTL by default (1 day) -- adjust the migrations to your retention needs before deploying.
 
 ## Metrics
 

@@ -150,6 +150,36 @@ pub struct Hip3OraclePx {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MiscEventsData {
+    pub local_time: String,
+    pub block_time: String,
+    pub block_number: u64,
+    pub events: Vec<MiscEvent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MiscEvent {
+    pub time: String,
+    pub hash: Hash,
+    pub inner: Map<String, Value>,
+}
+
+impl MiscEvent {
+    /// Returns the event kind and payload from the externally-tagged `inner` object.
+    pub fn kind_and_payload(&self) -> Result<(&str, &Value), &'static str> {
+        if self.inner.len() != 1 {
+            return Err("misc event inner must contain exactly one event kind");
+        }
+
+        self.inner
+            .iter()
+            .next()
+            .map(|(kind, payload)| (kind.as_str(), payload))
+            .ok_or("misc event inner must contain exactly one event kind")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BlockData {
     #[serde(rename = "abci_block")]
     pub abci_block: AbciBlockIn,

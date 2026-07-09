@@ -15,7 +15,8 @@ use crate::{
     config::{IndexerConfig, load_config},
     metrics::Metrics,
     streams::{
-        hip3_oracle_updates::Hip3OracleUpdates, node_fills::NodeFills, replica_cmds::ReplicaCmds,
+        hip3_oracle_updates::Hip3OracleUpdates, misc_events::MiscEvents, node_fills::NodeFills,
+        replica_cmds::ReplicaCmds,
     },
     websocket::WsServer,
 };
@@ -37,11 +38,18 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Commands {
-    ParseReplicaCmds {
+    #[command(name = "parse-replica-cmds")]
+    ReplicaCmds {
         #[arg(short, long)]
         path: PathBuf,
     },
-    ParseNodeFills {
+    #[command(name = "parse-node-fills")]
+    NodeFills {
+        #[arg(short, long)]
+        path: PathBuf,
+    },
+    #[command(name = "parse-misc-events")]
+    MiscEvents {
         #[arg(short, long)]
         path: PathBuf,
     },
@@ -57,23 +65,29 @@ async fn run_indexer(
     fs::create_dir_all(&config.checkpoints_dir)?;
 
     match args.command {
-        Some(Commands::ParseReplicaCmds { path }) => {
+        Some(Commands::ReplicaCmds { path }) => {
             let stream = ReplicaCmds::new(&ch, ws);
             streams::run(&config, stream, metrics, Some(path)).await
         }
-        Some(Commands::ParseNodeFills { path }) => {
+        Some(Commands::NodeFills { path }) => {
             let stream = NodeFills::new(&ch, ws);
+            streams::run(&config, stream, metrics, Some(path)).await
+        }
+        Some(Commands::MiscEvents { path }) => {
+            let stream = MiscEvents::new(&ch);
             streams::run(&config, stream, metrics, Some(path)).await
         }
         None => {
             let replica_cmds = ReplicaCmds::new(&ch, ws.clone());
             let node_fills = NodeFills::new(&ch, ws.clone());
             let hip3_oracle_updates = Hip3OracleUpdates::new(&ch, ws);
+            let misc_events = MiscEvents::new(&ch);
 
             tokio::try_join!(
                 streams::run(&config, replica_cmds, metrics, None),
                 streams::run(&config, node_fills, metrics, None),
                 streams::run(&config, hip3_oracle_updates, metrics, None),
+                streams::run(&config, misc_events, metrics, None),
             )?;
             Ok(())
         }
