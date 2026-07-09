@@ -16,7 +16,7 @@ use crate::{
     metrics::Metrics,
     streams::{
         hip3_oracle_updates::Hip3OracleUpdates, misc_events::MiscEvents, node_fills::NodeFills,
-        replica_cmds::ReplicaCmds,
+        node_twap_statuses::NodeTwapStatuses, replica_cmds::ReplicaCmds,
     },
     websocket::WsServer,
 };
@@ -53,6 +53,11 @@ enum Commands {
         #[arg(short, long)]
         path: PathBuf,
     },
+    #[command(name = "parse-node-twap-statuses")]
+    NodeTwapStatuses {
+        #[arg(short, long)]
+        path: PathBuf,
+    },
 }
 
 async fn run_indexer(
@@ -77,17 +82,23 @@ async fn run_indexer(
             let stream = MiscEvents::new(&ch);
             streams::run(&config, stream, metrics, Some(path)).await
         }
+        Some(Commands::NodeTwapStatuses { path }) => {
+            let stream = NodeTwapStatuses::new(&ch);
+            streams::run(&config, stream, metrics, Some(path)).await
+        }
         None => {
             let replica_cmds = ReplicaCmds::new(&ch, ws.clone());
             let node_fills = NodeFills::new(&ch, ws.clone());
             let hip3_oracle_updates = Hip3OracleUpdates::new(&ch, ws);
             let misc_events = MiscEvents::new(&ch);
+            let node_twap_statuses = NodeTwapStatuses::new(&ch);
 
             tokio::try_join!(
                 streams::run(&config, replica_cmds, metrics, None),
                 streams::run(&config, node_fills, metrics, None),
                 streams::run(&config, hip3_oracle_updates, metrics, None),
                 streams::run(&config, misc_events, metrics, None),
+                streams::run(&config, node_twap_statuses, metrics, None),
             )?;
             Ok(())
         }
