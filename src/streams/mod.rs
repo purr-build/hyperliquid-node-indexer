@@ -34,22 +34,16 @@ pub trait Stream {
 
     type Rows: Send + 'static;
 
-    type Sinks;
-
     fn parse(event: Event) -> anyhow::Result<Self::Rows>;
 
-    async fn write(
-        sinks: &mut Self::Sinks,
-        rows: &Self::Rows,
-        metrics: &Metrics,
-    ) -> anyhow::Result<()>;
+    async fn write(&mut self, rows: &Self::Rows, metrics: &Metrics) -> anyhow::Result<()>;
 
-    async fn commit(sinks: &mut Self::Sinks, metrics: &Metrics, force: bool) -> anyhow::Result<()>;
+    async fn commit(&mut self, metrics: &Metrics, force: bool) -> anyhow::Result<()>;
 }
 
 pub async fn run<S: Stream>(
     config: &IndexerConfig,
-    mut sinks: S::Sinks,
+    mut stream: S,
     metrics: &Metrics,
     explicit_path: Option<PathBuf>,
 ) -> anyhow::Result<()> {
@@ -63,7 +57,7 @@ pub async fn run<S: Stream>(
         S::NAME,
     )?;
 
-    let stream = ReceiverStream::new(tailer.run()?)
+    let events = ReceiverStream::new(tailer.run()?)
         .map(|ev| {
             let start = Instant::now();
             let pos = ev.position.clone();
@@ -74,17 +68,17 @@ pub async fn run<S: Stream>(
         .filter_map(|(pos, res)| async move { res.ok().map(|rows| (pos, rows)) });
 
     let mut checkpoint_ticker = tokio::time::interval(CHECKPOINT_INTERVAL);
-    tokio::pin!(stream);
+    tokio::pin!(events);
 
     let mut pending: Option<Position> = None;
     let mut last_log = Instant::now();
 
     loop {
         tokio::select! {
-            item = stream.next() => match item {
+            item = events.next() => match item {
                 Some((pos, rows)) => {
-                    S::write(&mut sinks, &rows, metrics).await?;
-                    S::commit(&mut sinks, metrics, false).await?;
+                    stream.write(&rows, metrics).await?;
+                    stream.commit(metrics, false).await?;
 
                     if last_log.elapsed() >= LOG_INTERVAL {
                         debug!(
@@ -101,7 +95,7 @@ pub async fn run<S: Stream>(
                 None => break,
             },
             _ = checkpoint_ticker.tick() => {
-                S::commit(&mut sinks, metrics, true).await?;
+                stream.commit(metrics, true).await?;
 
                 if let (Some(cp), Some(p)) = (&checkpoint_path, &pending) {
                     debug!("saving checkpoint {:?}", cp);
@@ -111,7 +105,7 @@ pub async fn run<S: Stream>(
         }
     }
 
-    S::commit(&mut sinks, metrics, true).await?;
+    stream.commit(metrics, true).await?;
 
     if let (Some(cp), Some(p)) = (&checkpoint_path, &pending) {
         save(cp, p)?;

@@ -15,9 +15,7 @@ use crate::{
     config::{IndexerConfig, load_config},
     metrics::Metrics,
     streams::{
-        hip3_oracle_updates::{Hip3OracleUpdates, Hip3OracleUpdatesSinks},
-        node_fills::{NodeFills, NodeFillsSinks},
-        replica_cmds::{ReplicaCmds, ReplicaCmdsSinks},
+        hip3_oracle_updates::Hip3OracleUpdates, node_fills::NodeFills, replica_cmds::ReplicaCmds,
     },
     websocket::WsServer,
 };
@@ -60,27 +58,22 @@ async fn run_indexer(
 
     match args.command {
         Some(Commands::ParseReplicaCmds { path }) => {
-            let sinks = ReplicaCmdsSinks::new(&ch, ws);
-            streams::run::<ReplicaCmds>(&config, sinks, metrics, Some(path)).await
+            let stream = ReplicaCmds::new(&ch, ws);
+            streams::run(&config, stream, metrics, Some(path)).await
         }
         Some(Commands::ParseNodeFills { path }) => {
-            let sinks = NodeFillsSinks::new(&ch, ws);
-            streams::run::<NodeFills>(&config, sinks, metrics, Some(path)).await
+            let stream = NodeFills::new(&ch, ws);
+            streams::run(&config, stream, metrics, Some(path)).await
         }
         None => {
-            let replica_sinks = ReplicaCmdsSinks::new(&ch, ws.clone());
-            let fills_sinks = NodeFillsSinks::new(&ch, ws.clone());
-            let hip3_oracle_updates_sinks = Hip3OracleUpdatesSinks::new(&ch, ws);
+            let replica_cmds = ReplicaCmds::new(&ch, ws.clone());
+            let node_fills = NodeFills::new(&ch, ws.clone());
+            let hip3_oracle_updates = Hip3OracleUpdates::new(&ch, ws);
 
             tokio::try_join!(
-                streams::run::<ReplicaCmds>(&config, replica_sinks, metrics, None),
-                streams::run::<NodeFills>(&config, fills_sinks, metrics, None),
-                streams::run::<Hip3OracleUpdates>(
-                    &config,
-                    hip3_oracle_updates_sinks,
-                    metrics,
-                    None
-                )
+                streams::run(&config, replica_cmds, metrics, None),
+                streams::run(&config, node_fills, metrics, None),
+                streams::run(&config, hip3_oracle_updates, metrics, None),
             )?;
             Ok(())
         }

@@ -132,18 +132,16 @@ pub fn parse(mut line: Vec<u8>) -> anyhow::Result<Vec<NodeFillRow>> {
     Ok(rows)
 }
 
-pub struct NodeFills;
-
-pub struct NodeFillsSinks {
-    node_fills: Inserter<NodeFillRow>,
-    ws: Option<WsServer>,
+pub struct NodeFills {
+    inserter: Inserter<NodeFillRow>,
+    websocket: Option<WsServer>,
 }
 
-impl NodeFillsSinks {
-    pub fn new(ch: &Client, ws: Option<WsServer>) -> Self {
+impl NodeFills {
+    pub fn new(ch: &Client, websocket: Option<WsServer>) -> Self {
         Self {
-            node_fills: new_inserter(ch, "node_fills"),
-            ws,
+            inserter: new_inserter(ch, "node_fills"),
+            websocket,
         }
     }
 }
@@ -153,33 +151,28 @@ impl Stream for NodeFills {
     const SOURCE_DIR: &'static str = "node_fills_streaming";
 
     type Rows = Vec<NodeFillRow>;
-    type Sinks = NodeFillsSinks;
 
     fn parse(event: Event) -> anyhow::Result<Self::Rows> {
         parse(event.line)
     }
 
-    async fn write(
-        sinks: &mut Self::Sinks,
-        rows: &Self::Rows,
-        metrics: &Metrics,
-    ) -> anyhow::Result<()> {
+    async fn write(&mut self, rows: &Self::Rows, metrics: &Metrics) -> anyhow::Result<()> {
         for row in rows {
             let lag = (Utc::now() - row.block_time).as_seconds_f64();
             metrics.record_ingested(Self::NAME, "fill");
             metrics.record_lag(Self::NAME, lag);
-            sinks.node_fills.write(row).await?;
+            self.inserter.write(row).await?;
         }
 
-        if let Some(ws) = &sinks.ws {
-            ws.send(WsData::NodeFills(rows));
+        if let Some(websocket) = &self.websocket {
+            websocket.send(WsData::NodeFills(rows));
         }
 
         Ok(())
     }
 
-    async fn commit(sinks: &mut Self::Sinks, metrics: &Metrics, force: bool) -> anyhow::Result<()> {
-        commit_metered(&mut sinks.node_fills, "node_fills", metrics, force).await
+    async fn commit(&mut self, metrics: &Metrics, force: bool) -> anyhow::Result<()> {
+        commit_metered(&mut self.inserter, "node_fills", metrics, force).await
     }
 }
 

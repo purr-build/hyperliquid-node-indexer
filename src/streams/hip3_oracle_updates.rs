@@ -116,18 +116,16 @@ fn required_px<'a>(
         .ok_or_else(|| anyhow::anyhow!("missing {field} for {coin}"))
 }
 
-pub struct Hip3OracleUpdates;
-
-pub struct Hip3OracleUpdatesSinks {
-    hip3_oracle_updates: Inserter<Hip3OracleUpdateRow>,
-    ws: Option<WsServer>,
+pub struct Hip3OracleUpdates {
+    inserter: Inserter<Hip3OracleUpdateRow>,
+    websocket: Option<WsServer>,
 }
 
-impl Hip3OracleUpdatesSinks {
-    pub fn new(ch: &Client, ws: Option<WsServer>) -> Self {
+impl Hip3OracleUpdates {
+    pub fn new(ch: &Client, websocket: Option<WsServer>) -> Self {
         Self {
-            hip3_oracle_updates: new_inserter(ch, "hip3_oracle_updates"),
-            ws,
+            inserter: new_inserter(ch, "hip3_oracle_updates"),
+            websocket,
         }
     }
 }
@@ -137,39 +135,28 @@ impl Stream for Hip3OracleUpdates {
     const SOURCE_DIR: &'static str = "hip3_oracle_updates_streaming";
 
     type Rows = Vec<Hip3OracleUpdateRow>;
-    type Sinks = Hip3OracleUpdatesSinks;
 
     fn parse(event: Event) -> anyhow::Result<Self::Rows> {
         parse(event.line)
     }
 
-    async fn write(
-        sinks: &mut Self::Sinks,
-        rows: &Self::Rows,
-        metrics: &Metrics,
-    ) -> anyhow::Result<()> {
+    async fn write(&mut self, rows: &Self::Rows, metrics: &Metrics) -> anyhow::Result<()> {
         for row in rows {
             let lag = (Utc::now() - row.block_time).as_seconds_f64();
             metrics.record_ingested(Self::NAME, "hip3_oracle_update");
             metrics.record_lag(Self::NAME, lag);
-            sinks.hip3_oracle_updates.write(row).await?;
+            self.inserter.write(row).await?;
         }
 
-        if let Some(ws) = &sinks.ws {
-            ws.send(WsData::Hip3OracleUpdates(rows));
+        if let Some(websocket) = &self.websocket {
+            websocket.send(WsData::Hip3OracleUpdates(rows));
         }
 
         Ok(())
     }
 
-    async fn commit(sinks: &mut Self::Sinks, metrics: &Metrics, force: bool) -> anyhow::Result<()> {
-        commit_metered(
-            &mut sinks.hip3_oracle_updates,
-            "hip3_oracle_updates",
-            metrics,
-            force,
-        )
-        .await
+    async fn commit(&mut self, metrics: &Metrics, force: bool) -> anyhow::Result<()> {
+        commit_metered(&mut self.inserter, "hip3_oracle_updates", metrics, force).await
     }
 }
 

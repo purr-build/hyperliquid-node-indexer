@@ -171,22 +171,20 @@ pub fn parse(height: u64, mut line: Vec<u8>) -> anyhow::Result<ReplicaCmdsRows> 
     })
 }
 
-pub struct ReplicaCmds;
-
-pub struct ReplicaCmdsSinks {
+pub struct ReplicaCmds {
     blocks: Inserter<BlockRow>,
     bundles: Inserter<SignedActionBundleRow>,
     actions: Inserter<ActionRow>,
-    ws: Option<WsServer>,
+    websocket: Option<WsServer>,
 }
 
-impl ReplicaCmdsSinks {
-    pub fn new(ch: &Client, ws: Option<WsServer>) -> Self {
+impl ReplicaCmds {
+    pub fn new(ch: &Client, websocket: Option<WsServer>) -> Self {
         Self {
             blocks: new_inserter(ch, "blocks"),
             bundles: new_inserter(ch, "signed_action_bundle"),
             actions: new_inserter(ch, "actions"),
-            ws,
+            websocket,
         }
     }
 }
@@ -196,7 +194,6 @@ impl Stream for ReplicaCmds {
     const SOURCE_DIR: &'static str = "replica_cmds";
 
     type Rows = ReplicaCmdsRows;
-    type Sinks = ReplicaCmdsSinks;
 
     fn parse(event: Event) -> anyhow::Result<Self::Rows> {
         let filename: u64 = event
@@ -208,37 +205,33 @@ impl Stream for ReplicaCmds {
         parse(filename + event.position.line_number as u64, event.line)
     }
 
-    async fn write(
-        sinks: &mut Self::Sinks,
-        rows: &Self::Rows,
-        metrics: &Metrics,
-    ) -> anyhow::Result<()> {
+    async fn write(&mut self, rows: &Self::Rows, metrics: &Metrics) -> anyhow::Result<()> {
         let lag = (Utc::now() - rows.block.time).as_seconds_f64();
         metrics.record_ingested(Self::NAME, "block");
         metrics.record_lag(Self::NAME, lag);
-        sinks.blocks.write(&rows.block).await?;
+        self.blocks.write(&rows.block).await?;
 
-        if let Some(ws) = &sinks.ws {
-            ws.send(WsData::Blocks(&rows.block));
+        if let Some(websocket) = &self.websocket {
+            websocket.send(WsData::Blocks(&rows.block));
         }
 
         for b in &rows.bundles {
             metrics.record_ingested(Self::NAME, "bundle");
-            sinks.bundles.write(b).await?;
+            self.bundles.write(b).await?;
         }
 
         for a in &rows.actions {
             metrics.record_ingested(Self::NAME, "action");
-            sinks.actions.write(a).await?;
+            self.actions.write(a).await?;
         }
 
         Ok(())
     }
 
-    async fn commit(sinks: &mut Self::Sinks, metrics: &Metrics, force: bool) -> anyhow::Result<()> {
-        commit_metered(&mut sinks.blocks, "blocks", metrics, force).await?;
-        commit_metered(&mut sinks.bundles, "signed_action_bundle", metrics, force).await?;
-        commit_metered(&mut sinks.actions, "actions", metrics, force).await?;
+    async fn commit(&mut self, metrics: &Metrics, force: bool) -> anyhow::Result<()> {
+        commit_metered(&mut self.blocks, "blocks", metrics, force).await?;
+        commit_metered(&mut self.bundles, "signed_action_bundle", metrics, force).await?;
+        commit_metered(&mut self.actions, "actions", metrics, force).await?;
         Ok(())
     }
 }
