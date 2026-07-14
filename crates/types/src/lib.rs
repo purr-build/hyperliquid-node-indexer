@@ -16,6 +16,192 @@ pub type Nonce = u64;
 pub type OrderId = u64;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvmBlocksAndReceiptsData(pub String, pub EvmBlockData);
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvmBlockData {
+    pub block: EvmBlock,
+    pub receipts: Vec<EvmReceipt>,
+    pub system_txs: Vec<EvmSystemTransaction>,
+    pub read_precompile_calls: Vec<EvmReadPrecompileCalls>,
+    pub highest_precompile_address: Address,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum EvmBlock {
+    Reth115(EvmBlockContents),
+}
+
+impl EvmBlock {
+    pub fn contents(&self) -> &EvmBlockContents {
+        match self {
+            Self::Reth115(block) => block,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvmBlockContents {
+    pub header: EvmSealedHeader,
+    pub body: EvmBlockBody,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvmSealedHeader {
+    pub hash: Hash,
+    pub header: EvmHeader,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvmHeader {
+    pub parent_hash: Hash,
+    pub sha3_uncles: Hash,
+    pub miner: Address,
+    pub state_root: Hash,
+    pub transactions_root: Hash,
+    pub receipts_root: Hash,
+    pub logs_bloom: Hex,
+    pub difficulty: Hex,
+    pub number: Hex,
+    pub gas_limit: Hex,
+    pub gas_used: Hex,
+    pub timestamp: Hex,
+    pub extra_data: Hex,
+    pub mix_hash: Hash,
+    pub nonce: Hex,
+    #[serde(default)]
+    pub base_fee_per_gas: Option<Hex>,
+    #[serde(default)]
+    pub withdrawals_root: Option<Hash>,
+    #[serde(default)]
+    pub blob_gas_used: Option<Hex>,
+    #[serde(default)]
+    pub excess_blob_gas: Option<Hex>,
+    #[serde(default)]
+    pub parent_beacon_block_root: Option<Hash>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvmBlockBody {
+    pub transactions: Vec<EvmSignedTransaction>,
+    pub ommers: Vec<Value>,
+    pub withdrawals: Vec<Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvmSignedTransaction {
+    pub signature: EvmSignature,
+    pub transaction: EvmTransaction,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvmSignature {
+    pub r: Hex,
+    pub s: Hex,
+    pub y_parity: Hex,
+    pub v: Hex,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum EvmTransaction {
+    Legacy(EvmLegacyTransaction),
+    Eip2930(EvmEip2930Transaction),
+    Eip1559(EvmEip1559Transaction),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvmLegacyTransaction {
+    #[serde(default)]
+    pub chain_id: Option<Hex>,
+    pub nonce: Hex,
+    pub gas_price: Hex,
+    pub gas: Hex,
+    pub to: Option<Address>,
+    pub value: Hex,
+    pub input: Hex,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvmEip2930Transaction {
+    pub chain_id: Hex,
+    pub nonce: Hex,
+    pub gas_price: Hex,
+    pub gas: Hex,
+    pub to: Option<Address>,
+    pub value: Hex,
+    pub access_list: Vec<EvmAccessListItem>,
+    pub input: Hex,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvmEip1559Transaction {
+    pub chain_id: Hex,
+    pub nonce: Hex,
+    pub gas: Hex,
+    pub max_fee_per_gas: Hex,
+    pub max_priority_fee_per_gas: Hex,
+    pub to: Option<Address>,
+    pub value: Hex,
+    pub access_list: Vec<EvmAccessListItem>,
+    pub input: Hex,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvmAccessListItem {
+    pub address: Address,
+    pub storage_keys: Vec<Hash>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvmReceipt {
+    pub tx_type: String,
+    pub success: bool,
+    pub cumulative_gas_used: u64,
+    pub logs: Vec<EvmLog>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvmLog {
+    pub address: Address,
+    pub topics: Vec<Hash>,
+    pub data: Hex,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvmSystemTransaction {
+    pub tx: EvmTransaction,
+    pub receipt: EvmReceipt,
+    pub from: Address,
+}
+
+pub type EvmReadPrecompileCalls = (Address, Vec<EvmReadPrecompileCall>);
+pub type EvmReadPrecompileCall = (EvmPrecompileInput, EvmPrecompileResult);
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvmPrecompileInput {
+    pub input: Hex,
+    pub gas_limit: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum EvmPrecompileResult {
+    Ok(EvmPrecompileOutput),
+    Err(Value),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvmPrecompileOutput {
+    pub gas_used: u64,
+    pub bytes: Hex,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NodeFillsData {
     pub local_time: String,
     pub block_time: String,

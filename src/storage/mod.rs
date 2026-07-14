@@ -68,6 +68,10 @@ pub fn sig_from_hex(s: &str) -> Result<Hash, &'static str> {
     uint_from_hex(s)
 }
 
+pub fn uint256_from_hex(s: &str) -> Result<Hash, &'static str> {
+    uint_from_hex(s)
+}
+
 pub fn decimal_from_str(s: &str) -> Result<Decimal, &'static str> {
     let (negative, unsigned) = match s.as_bytes().first() {
         Some(b'-') => (true, &s[1..]),
