@@ -9,7 +9,7 @@ Indexes data streams written by a [Hyperliquid node](https://github.com/hyperliq
 - [x] `hip3_oracle_updates`
 - [x] `system_and_core_writer_actions` -- system transfers and core-writer actions with JSON payloads
 - [x] `misc_events` -- typed event envelope with variant-specific data in a queryable JSON payload
-- [ ] `evm_blocks_and_receipts`
+- [x] `evm_blocks_and_receipts` -- EVM blocks, transactions, receipts, logs, and read-precompile calls
 - [x] `node_twap_statuses` -- TWAP lifecycle state, execution progress, and errors
 - [ ] `node_trades`
 - [ ] `node_raw_book_diffs`
@@ -38,6 +38,7 @@ cargo run --release -- parse-node-fills --path /path/to/node_fills_streaming/...
 cargo run --release -- parse-misc-events --path /path/to/misc_events_streaming/.../file
 cargo run --release -- parse-node-twap-statuses --path /path/to/node_twap_statuses_streaming/.../file
 cargo run --release -- parse-system-and-core-writer-actions --path /path/to/system_and_core_writer_actions_streaming/.../file
+cargo run --release -- parse-evm-blocks-and-receipts --path /path/to/evm_blocks_and_receipts/.../file
 ```
 
 ## Configuration
@@ -90,7 +91,7 @@ Available subscription types:
 
 ## Storage
 
-One table per stream, defined in `migrations/`:
+Tables are defined in `migrations/`:
 
 | table                  | source         | contents                                    |
 | ---------------------- | -------------- | ------------------------------------------- |
@@ -102,6 +103,11 @@ One table per stream, defined in `migrations/`:
 | `misc_events`          | `misc_events`  | common event envelope and variant JSON payload |
 | `node_twap_statuses`   | `node_twap_statuses` | TWAP lifecycle and execution state     |
 | `system_and_core_writer_actions` | `system_and_core_writer_actions` | action envelope and variant JSON payload |
+| `evm_blocks` | `evm_blocks_and_receipts` | EVM block headers and metadata |
+| `evm_transactions` | `evm_blocks_and_receipts` | regular and system EVM transactions |
+| `evm_receipts` | `evm_blocks_and_receipts` | transaction execution results and gas usage |
+| `evm_logs` | `evm_blocks_and_receipts` | EVM event logs and topics |
+| `evm_read_precompile_calls` | `evm_blocks_and_receipts` | captured read-precompile inputs and results |
 
 Prices and sizes are stored as `Decimal(38, 18)`; addresses and hashes as raw `FixedString` bytes. The `misc_events.payload` JSON column preserves variant-specific fields and supports native ClickHouse JSON queries. Tables have a short TTL by default (1 day) -- adjust the migrations to your retention needs before deploying.
 

@@ -1,3 +1,4 @@
+pub mod evm_blocks_and_receipts;
 pub mod hip3_oracle_updates;
 pub mod misc_events;
 pub mod node_fills;
