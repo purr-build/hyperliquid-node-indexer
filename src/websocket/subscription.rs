@@ -16,6 +16,7 @@ pub enum SubscriptionKind {
     Blocks,
     NodeFills,
     Hip3OracleUpdates,
+    EvmTransactions,
 }
 
 impl SubscriptionKind {
@@ -24,6 +25,7 @@ impl SubscriptionKind {
             "blocks" => Some(Self::Blocks),
             "nodeFills" => Some(Self::NodeFills),
             "hip3OracleUpdates" => Some(Self::Hip3OracleUpdates),
+            "evmTransactions" => Some(Self::EvmTransactions),
             _ => None,
         }
     }
@@ -35,6 +37,7 @@ impl std::fmt::Display for SubscriptionKind {
             Self::Blocks => write!(f, "blocks"),
             Self::NodeFills => write!(f, "nodeFills"),
             Self::Hip3OracleUpdates => write!(f, "hip3OracleUpdates"),
+            Self::EvmTransactions => write!(f, "evmTransactions"),
         }
     }
 }

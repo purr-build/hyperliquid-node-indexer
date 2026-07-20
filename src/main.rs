@@ -98,7 +98,7 @@ async fn run_indexer(
             streams::run(&config, stream, metrics, Some(path)).await
         }
         Some(Commands::EvmBlocksAndReceipts { path }) => {
-            let stream = EvmBlocksAndReceipts::new(&ch);
+            let stream = EvmBlocksAndReceipts::new(&ch, ws);
             streams::run(&config, stream, metrics, Some(path)).await
         }
         Some(Commands::SystemAndCoreWriterActions { path }) => {
@@ -108,11 +108,11 @@ async fn run_indexer(
         None => {
             let replica_cmds = ReplicaCmds::new(&ch, ws.clone());
             let node_fills = NodeFills::new(&ch, ws.clone());
-            let hip3_oracle_updates = Hip3OracleUpdates::new(&ch, ws);
+            let hip3_oracle_updates = Hip3OracleUpdates::new(&ch, ws.clone());
             let misc_events = MiscEvents::new(&ch);
             let node_twap_statuses = NodeTwapStatuses::new(&ch);
             let system_and_core_writer_actions = SystemAndCoreWriterActions::new(&ch);
-            let evm_blocks_and_receipts = EvmBlocksAndReceipts::new(&ch);
+            let evm_blocks_and_receipts = EvmBlocksAndReceipts::new(&ch, ws);
 
             tokio::try_join!(
                 streams::run(&config, replica_cmds, metrics, None),

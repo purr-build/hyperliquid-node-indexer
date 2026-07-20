@@ -84,8 +84,9 @@ Available subscription types:
 
 | type        | channel     | payload                                  |
 | ----------- | ----------- | ---------------------------------------- |
-| `blocks`    | `blocks`    | one block header per message (no actions) |
-| `nodeFills` | `nodeFills` | array of fills, full data                 |
+| `blocks`          | `blocks`          | one block header per message (no actions)      |
+| `nodeFills`       | `nodeFills`       | array of fills, full data                      |
+| `evmTransactions` | `evmTransactions` | array of transactions from one EVM block       |
 
 `{"method":"unsubscribe",...}` stops a stream, `{"method":"ping"}` returns `{"channel":"pong"}`. Slow consumers that fall behind the 4096-message buffer receive an error message and skip ahead rather than stalling ingestion.
 

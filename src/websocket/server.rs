@@ -18,10 +18,11 @@ use tracing::{debug, info, warn};
 
 use crate::{
     streams::{
-        hip3_oracle_updates::Hip3OracleUpdateRow, node_fills::NodeFillRow, replica_cmds::BlockRow,
+        evm_blocks_and_receipts::EvmTransactionRow, hip3_oracle_updates::Hip3OracleUpdateRow,
+        node_fills::NodeFillRow, replica_cmds::BlockRow,
     },
     websocket::{
-        messages::{BlockMsg, Hip3OracleUpdateMsg, NodeFillMsg, channel_msg},
+        messages::{BlockMsg, EvmTransactionMsg, Hip3OracleUpdateMsg, NodeFillMsg, channel_msg},
         subscription::{
             ClientRequest, SubscriptionAck, SubscriptionKind, subscriptions_from_query,
         },
@@ -34,6 +35,7 @@ struct Channels {
     blocks: broadcast::Sender<Utf8Bytes>,
     node_fills: broadcast::Sender<Utf8Bytes>,
     hip3_oracle_updates: broadcast::Sender<Utf8Bytes>,
+    evm_transactions: broadcast::Sender<Utf8Bytes>,
 }
 
 impl Channels {
@@ -42,6 +44,7 @@ impl Channels {
             SubscriptionKind::Blocks => &self.blocks,
             SubscriptionKind::NodeFills => &self.node_fills,
             SubscriptionKind::Hip3OracleUpdates => &self.hip3_oracle_updates,
+            SubscriptionKind::EvmTransactions => &self.evm_transactions,
         }
     }
 }
@@ -50,6 +53,7 @@ pub enum WsData<'a> {
     Blocks(&'a BlockRow),
     NodeFills(&'a [NodeFillRow]),
     Hip3OracleUpdates(&'a [Hip3OracleUpdateRow]),
+    EvmTransactions(&'a [EvmTransactionRow]),
 }
 
 impl WsData<'_> {
@@ -58,6 +62,7 @@ impl WsData<'_> {
             Self::Blocks(_) => SubscriptionKind::Blocks,
             Self::NodeFills(_) => SubscriptionKind::NodeFills,
             Self::Hip3OracleUpdates(_) => SubscriptionKind::Hip3OracleUpdates,
+            Self::EvmTransactions(_) => SubscriptionKind::EvmTransactions,
         }
     }
 }
@@ -72,12 +77,14 @@ impl WsServer {
         let (blocks, _) = broadcast::channel(CHANNEL_CAPACITY);
         let (node_fills, _) = broadcast::channel(CHANNEL_CAPACITY);
         let (hip3_oracle_updates, _) = broadcast::channel(CHANNEL_CAPACITY);
+        let (evm_transactions, _) = broadcast::channel(CHANNEL_CAPACITY);
 
         Self {
             channels: Arc::new(Channels {
                 blocks,
                 node_fills,
                 hip3_oracle_updates,
+                evm_transactions,
             }),
         }
     }
@@ -104,6 +111,14 @@ impl WsServer {
                 }
                 let msgs: Vec<Hip3OracleUpdateMsg> =
                     updates.iter().map(Hip3OracleUpdateMsg::from).collect();
+                channel_msg(&channel, &msgs)
+            }
+            WsData::EvmTransactions(transactions) => {
+                if transactions.is_empty() {
+                    return;
+                }
+                let msgs: Vec<EvmTransactionMsg> =
+                    transactions.iter().map(EvmTransactionMsg::from).collect();
                 channel_msg(&channel, &msgs)
             }
         };
@@ -153,6 +168,7 @@ async fn handle_connection(stream: TcpStream, channels: &Channels) -> anyhow::Re
     let mut blocks_rx: Option<broadcast::Receiver<Utf8Bytes>> = None;
     let mut fills_rx: Option<broadcast::Receiver<Utf8Bytes>> = None;
     let mut hip3_oracle_updates_rx: Option<broadcast::Receiver<Utf8Bytes>> = None;
+    let mut evm_transactions_rx: Option<broadcast::Receiver<Utf8Bytes>> = None;
 
     // Subscriptions requested via query string, e.g. `?subscription=nodeFills`.
     for subscription in subscriptions_from_query(&query) {
@@ -160,6 +176,7 @@ async fn handle_connection(stream: TcpStream, channels: &Channels) -> anyhow::Re
             SubscriptionKind::Blocks => &mut blocks_rx,
             SubscriptionKind::NodeFills => &mut fills_rx,
             SubscriptionKind::Hip3OracleUpdates => &mut hip3_oracle_updates_rx,
+            SubscriptionKind::EvmTransactions => &mut evm_transactions_rx,
         };
 
         *rx = Some(channels.sender(subscription).subscribe());
@@ -183,6 +200,7 @@ async fn handle_connection(stream: TcpStream, channels: &Channels) -> anyhow::Re
                                 SubscriptionKind::Blocks => &mut blocks_rx,
                                 SubscriptionKind::NodeFills => &mut fills_rx,
                                 SubscriptionKind::Hip3OracleUpdates => &mut hip3_oracle_updates_rx,
+                                SubscriptionKind::EvmTransactions => &mut evm_transactions_rx,
                             };
                             *rx = Some(channels.sender(subscription).subscribe());
                             channel_msg(
@@ -195,6 +213,7 @@ async fn handle_connection(stream: TcpStream, channels: &Channels) -> anyhow::Re
                                 SubscriptionKind::Blocks => blocks_rx = None,
                                 SubscriptionKind::NodeFills => fills_rx = None,
                                 SubscriptionKind::Hip3OracleUpdates => hip3_oracle_updates_rx = None,
+                                SubscriptionKind::EvmTransactions => evm_transactions_rx = None,
                             }
                             channel_msg(
                                 "subscriptionResponse",
@@ -242,6 +261,18 @@ async fn handle_connection(stream: TcpStream, channels: &Channels) -> anyhow::Re
                     sink.send(Message::Text(msg)).await?;
                 }
                 Err(broadcast::error::RecvError::Closed) => hip3_oracle_updates_rx = None,
+            },
+            item = recv_opt(&mut evm_transactions_rx) => match item {
+                Ok(msg) => sink.send(Message::Text(msg)).await?,
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    warn!("websocket client lagged on evmTransactions, dropped {n} messages");
+                    let msg = channel_msg(
+                        "error",
+                        &format!("lagged: dropped {n} evmTransactions messages"),
+                    );
+                    sink.send(Message::Text(msg)).await?;
+                }
+                Err(broadcast::error::RecvError::Closed) => evm_transactions_rx = None,
             },
         }
     }
@@ -412,5 +443,70 @@ mod tests {
         assert_eq!(msg["data"][0]["blockNumber"], 1061545103);
         assert_eq!(msg["data"][0]["coin"], "para:AVGO");
         assert_eq!(msg["data"][0]["oraclePx"], "368.11");
+    }
+
+    #[tokio::test]
+    async fn subscribe_and_receive_evm_transactions() {
+        let server = WsServer::new();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        drop(listener);
+
+        tokio::spawn(server.clone().run(addr));
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let (mut ws, _) = tokio_tungstenite::connect_async(format!(
+            "ws://{addr}/ws?subscription=evmTransactions"
+        ))
+        .await
+        .unwrap();
+
+        let ack = ws.next().await.unwrap().unwrap();
+        let ack: serde_json::Value = serde_json::from_str(ack.to_text().unwrap()).unwrap();
+        assert_eq!(ack["channel"], "subscriptionResponse");
+        assert_eq!(ack["data"]["subscription"]["type"], "evmTransactions");
+
+        let transactions = [EvmTransactionRow {
+            block_time: Utc::now(),
+            block_number: 42,
+            transaction_index: 3,
+            hash: Some([1; 32]),
+            is_system: false,
+            transaction_type: "Eip1559".to_string(),
+            chain_id: Some(999),
+            nonce: 7,
+            gas: 21_000,
+            gas_price: None,
+            max_fee_per_gas: Some([2; 32]),
+            max_priority_fee_per_gas: Some([3; 32]),
+            from_address: Some([4; 20]),
+            to_address: Some([5; 20]),
+            value: [6; 32],
+            input: "0xabcdef".to_string(),
+            access_list: r#"{"items":[]}"#.to_string(),
+            signature_r: Some([7; 32]),
+            signature_s: Some([8; 32]),
+            signature_y_parity: Some(1),
+        }];
+        server.send(WsData::EvmTransactions(&transactions));
+
+        let msg = tokio::time::timeout(std::time::Duration::from_secs(1), ws.next())
+            .await
+            .expect("timed out waiting for EVM transactions")
+            .unwrap()
+            .unwrap();
+        let msg: serde_json::Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+        assert_eq!(msg["channel"], "evmTransactions");
+        assert_eq!(msg["data"][0]["blockNumber"], 42);
+        assert_eq!(msg["data"][0]["transactionIndex"], 3);
+        assert_eq!(msg["data"][0]["hash"], format!("0x{}", "01".repeat(32)));
+        assert_eq!(msg["data"][0]["gas"], 21_000);
+        assert_eq!(
+            msg["data"][0]["maxFeePerGas"],
+            format!("0x{}", "02".repeat(32))
+        );
+        assert_eq!(msg["data"][0]["accessList"], serde_json::json!([]));
+        assert!(msg["data"][0].get("gasPrice").is_none());
     }
 }

@@ -1,13 +1,14 @@
 //! Outgoing websocket message shapes and JSON formatting helpers.
 
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio_tungstenite::tungstenite::Utf8Bytes;
 
 use crate::{
     storage::{DECIMAL_MULTIPLIER, Decimal},
     streams::{
-        hip3_oracle_updates::Hip3OracleUpdateRow, node_fills::NodeFillRow, replica_cmds::BlockRow,
+        evm_blocks_and_receipts::EvmTransactionRow, hip3_oracle_updates::Hip3OracleUpdateRow,
+        node_fills::NodeFillRow, replica_cmds::BlockRow,
     },
 };
 
@@ -159,6 +160,86 @@ impl From<&Hip3OracleUpdateRow> for Hip3OracleUpdateMsg {
             external_last_update_time: row.external_last_update_time,
             external_daily_px: decimal_string(row.external_daily_px),
             spot_px: decimal_string(row.spot_px),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct JsonItems {
+    items: Vec<serde_json::Value>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvmTransactionMsg {
+    block_time: DateTime<Utc>,
+    block_number: u64,
+    transaction_index: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hash: Option<String>,
+    is_system: bool,
+    transaction_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chain_id: Option<u64>,
+    nonce: u64,
+    gas: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    gas_price: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_fee_per_gas: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_priority_fee_per_gas: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    from_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    to_address: Option<String>,
+    value: String,
+    input: String,
+    access_list: Vec<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    signature_r: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    signature_s: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    signature_y_parity: Option<u8>,
+}
+
+impl From<&EvmTransactionRow> for EvmTransactionMsg {
+    fn from(row: &EvmTransactionRow) -> Self {
+        let access_list = serde_json::from_str::<JsonItems>(&row.access_list)
+            .expect("EVM transaction access list should be valid JSON")
+            .items;
+
+        Self {
+            block_time: row.block_time,
+            block_number: row.block_number,
+            transaction_index: row.transaction_index,
+            hash: row.hash.as_ref().map(|value| Hex(value).to_string()),
+            is_system: row.is_system,
+            transaction_type: row.transaction_type.clone(),
+            chain_id: row.chain_id,
+            nonce: row.nonce,
+            gas: row.gas,
+            gas_price: row.gas_price.as_ref().map(|value| Hex(value).to_string()),
+            max_fee_per_gas: row
+                .max_fee_per_gas
+                .as_ref()
+                .map(|value| Hex(value).to_string()),
+            max_priority_fee_per_gas: row
+                .max_priority_fee_per_gas
+                .as_ref()
+                .map(|value| Hex(value).to_string()),
+            from_address: row
+                .from_address
+                .as_ref()
+                .map(|value| Hex(value).to_string()),
+            to_address: row.to_address.as_ref().map(|value| Hex(value).to_string()),
+            value: Hex(&row.value).to_string(),
+            input: row.input.clone(),
+            access_list,
+            signature_r: row.signature_r.as_ref().map(|value| Hex(value).to_string()),
+            signature_s: row.signature_s.as_ref().map(|value| Hex(value).to_string()),
+            signature_y_parity: row.signature_y_parity,
         }
     }
 }

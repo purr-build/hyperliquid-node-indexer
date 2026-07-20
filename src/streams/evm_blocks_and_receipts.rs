@@ -14,6 +14,7 @@ use crate::{
         uint256_from_hex,
     },
     streams::{Stream, commit_metered, parse_datetime_nanos},
+    websocket::{WsData, WsServer},
 };
 
 #[derive(Deserialize, Row, Serialize, Debug)]
@@ -714,16 +715,18 @@ pub struct EvmBlocksAndReceipts {
     receipts: Inserter<EvmReceiptRow>,
     logs: Inserter<EvmLogRow>,
     read_precompile_calls: Inserter<EvmReadPrecompileCallRow>,
+    websocket: Option<WsServer>,
 }
 
 impl EvmBlocksAndReceipts {
-    pub fn new(ch: &Client) -> Self {
+    pub fn new(ch: &Client, websocket: Option<WsServer>) -> Self {
         Self {
             blocks: new_inserter(ch, "evm_blocks"),
             transactions: new_inserter(ch, "evm_transactions"),
             receipts: new_inserter(ch, "evm_receipts"),
             logs: new_inserter(ch, "evm_logs"),
             read_precompile_calls: new_inserter(ch, "evm_read_precompile_calls"),
+            websocket,
         }
     }
 }
@@ -748,6 +751,10 @@ impl Stream for EvmBlocksAndReceipts {
             metrics.record_ingested(Self::NAME, "transaction");
             self.transactions.write(transaction).await?;
         }
+        if let Some(websocket) = &self.websocket {
+            websocket.send(WsData::EvmTransactions(&rows.transactions));
+        }
+
         for receipt in &rows.receipts {
             metrics.record_ingested(Self::NAME, "receipt");
             self.receipts.write(receipt).await?;
