@@ -6,7 +6,9 @@ use tokio_tungstenite::tungstenite::Utf8Bytes;
 
 use crate::{
     storage::{DECIMAL_MULTIPLIER, Decimal},
-    streams::{node_fills::NodeFillRow, replica_cmds::BlockRow},
+    streams::{
+        hip3_oracle_updates::Hip3OracleUpdateRow, node_fills::NodeFillRow, replica_cmds::BlockRow,
+    },
 };
 
 pub fn channel_msg<T: Serialize>(channel: &str, data: &T) -> Utf8Bytes {
@@ -117,6 +119,48 @@ pub struct NodeFillMsg {
     deployer_fee: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     priority_gas: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Hip3OracleUpdateMsg {
+    local_time: DateTime<Utc>,
+    block_time: DateTime<Utc>,
+    block_number: u64,
+    coin: String,
+    update_class: String,
+    oracle_px: String,
+    oracle_last_update_time: DateTime<Utc>,
+    oracle_daily_px: String,
+    mark_px: String,
+    mark_last_update_time: DateTime<Utc>,
+    mark_daily_px: String,
+    external_px: String,
+    external_last_update_time: DateTime<Utc>,
+    external_daily_px: String,
+    spot_px: String,
+}
+
+impl From<&Hip3OracleUpdateRow> for Hip3OracleUpdateMsg {
+    fn from(row: &Hip3OracleUpdateRow) -> Self {
+        Self {
+            local_time: row.local_time,
+            block_time: row.block_time,
+            block_number: row.block_number,
+            coin: row.coin.clone(),
+            update_class: row.update_class.clone(),
+            oracle_px: decimal_string(row.oracle_px),
+            oracle_last_update_time: row.oracle_last_update_time,
+            oracle_daily_px: decimal_string(row.oracle_daily_px),
+            mark_px: decimal_string(row.mark_px),
+            mark_last_update_time: row.mark_last_update_time,
+            mark_daily_px: decimal_string(row.mark_daily_px),
+            external_px: decimal_string(row.external_px),
+            external_last_update_time: row.external_last_update_time,
+            external_daily_px: decimal_string(row.external_daily_px),
+            spot_px: decimal_string(row.spot_px),
+        }
+    }
 }
 
 impl From<&NodeFillRow> for NodeFillMsg {

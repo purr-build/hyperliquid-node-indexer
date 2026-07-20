@@ -21,7 +21,7 @@ use crate::{
         hip3_oracle_updates::Hip3OracleUpdateRow, node_fills::NodeFillRow, replica_cmds::BlockRow,
     },
     websocket::{
-        messages::{BlockMsg, NodeFillMsg, channel_msg},
+        messages::{BlockMsg, Hip3OracleUpdateMsg, NodeFillMsg, channel_msg},
         subscription::{
             ClientRequest, SubscriptionAck, SubscriptionKind, subscriptions_from_query,
         },
@@ -102,7 +102,9 @@ impl WsServer {
                 if updates.is_empty() {
                     return;
                 }
-                channel_msg(&channel, &updates)
+                let msgs: Vec<Hip3OracleUpdateMsg> =
+                    updates.iter().map(Hip3OracleUpdateMsg::from).collect();
+                channel_msg(&channel, &msgs)
             }
         };
         let _ = tx.send(msg);
@@ -229,6 +231,18 @@ async fn handle_connection(stream: TcpStream, channels: &Channels) -> anyhow::Re
                 }
                 Err(broadcast::error::RecvError::Closed) => fills_rx = None,
             },
+            item = recv_opt(&mut hip3_oracle_updates_rx) => match item {
+                Ok(msg) => sink.send(Message::Text(msg)).await?,
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    warn!("websocket client lagged on hip3OracleUpdates, dropped {n} messages");
+                    let msg = channel_msg(
+                        "error",
+                        &format!("lagged: dropped {n} hip3OracleUpdates messages"),
+                    );
+                    sink.send(Message::Text(msg)).await?;
+                }
+                Err(broadcast::error::RecvError::Closed) => hip3_oracle_updates_rx = None,
+            },
         }
     }
 
@@ -344,5 +358,59 @@ mod tests {
         assert_eq!(msg["data"][0]["blockNumber"], 99);
         assert_eq!(msg["data"][0]["px"], "50000");
         assert_eq!(msg["data"][0]["sz"], "0.5");
+    }
+
+    #[tokio::test]
+    async fn subscribe_and_receive_hip3_oracle_updates() {
+        let server = WsServer::new();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        drop(listener);
+
+        tokio::spawn(server.clone().run(addr));
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let (mut ws, _) = tokio_tungstenite::connect_async(format!(
+            "ws://{addr}/ws?subscription=hip3OracleUpdates"
+        ))
+        .await
+        .unwrap();
+
+        let ack = ws.next().await.unwrap().unwrap();
+        let ack: serde_json::Value = serde_json::from_str(ack.to_text().unwrap()).unwrap();
+        assert_eq!(ack["channel"], "subscriptionResponse");
+        assert_eq!(ack["data"]["subscription"]["type"], "hip3OracleUpdates");
+
+        let now = Utc::now();
+        let updates = [Hip3OracleUpdateRow {
+            local_time: now,
+            block_time: now,
+            block_number: 1061545103,
+            coin: "para:AVGO".to_string(),
+            update_class: "Deployer".to_string(),
+            oracle_px: 368 * DECIMAL_MULTIPLIER + 11 * DECIMAL_MULTIPLIER / 100,
+            oracle_last_update_time: now,
+            oracle_daily_px: 0,
+            mark_px: 0,
+            mark_last_update_time: now,
+            mark_daily_px: 0,
+            external_px: 0,
+            external_last_update_time: now,
+            external_daily_px: 0,
+            spot_px: 0,
+        }];
+        server.send(WsData::Hip3OracleUpdates(&updates));
+
+        let msg = tokio::time::timeout(std::time::Duration::from_secs(1), ws.next())
+            .await
+            .expect("timed out waiting for HIP-3 oracle updates")
+            .unwrap()
+            .unwrap();
+        let msg: serde_json::Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+        assert_eq!(msg["channel"], "hip3OracleUpdates");
+        assert_eq!(msg["data"][0]["blockNumber"], 1061545103);
+        assert_eq!(msg["data"][0]["coin"], "para:AVGO");
+        assert_eq!(msg["data"][0]["oraclePx"], "368.11");
     }
 }

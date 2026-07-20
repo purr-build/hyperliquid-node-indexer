@@ -23,6 +23,7 @@ impl SubscriptionKind {
         match value {
             "blocks" => Some(Self::Blocks),
             "nodeFills" => Some(Self::NodeFills),
+            "hip3OracleUpdates" => Some(Self::Hip3OracleUpdates),
             _ => None,
         }
     }
